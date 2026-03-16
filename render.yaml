@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: english-bot-webhook
+    env: node
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: TZ
+        value: Asia/Taipei
+
+  - type: cron
+    name: daily-lesson
+    env: node
+    buildCommand: npm install
+    schedule: "0 0 * * 1-6"
+    startCommand: node -e "import('./src/jobs/dailyLesson.js').then(m => m.run())"
+
+  - type: cron
+    name: daily-quiz
+    env: node
+    buildCommand: npm install
+    schedule: "0 12 * * *"
+    startCommand: node -e "import('./src/jobs/dailyQuiz.js').then(m => m.run())"
+
+  - type: cron
+    name: weekly-review
+    env: node
+    buildCommand: npm install
+    schedule: "0 2 * * 0"
+    startCommand: node -e "import('./src/jobs/weeklyReview.js').then(m => m.run())"
