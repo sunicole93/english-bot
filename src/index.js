@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { middleware } from '@line/bot-sdk';
+import crypto from 'crypto';
 import { handleReply } from './webhook/handleReply.js';
 import { run as runDailyLesson } from './jobs/dailyLesson.js';
 import { run as runDailyQuiz } from './jobs/dailyQuiz.js';
@@ -9,17 +9,12 @@ import { run as runWeeklyReview } from './jobs/weeklyReview.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const lineConfig = {
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-  channelSecret: process.env.LINE_CHANNEL_SECRET,
-};
-
 // Health check
 app.get('/health', (req, res) => {
   res.json({ ok: true });
 });
 
-// Cron secret validator middleware
+// Cron secret validator
 function verifyCronSecret(req, res, next) {
   const { secret } = req.query;
   if (!secret || secret !== process.env.CRON_SECRET) {
@@ -48,12 +43,36 @@ app.get('/cron/weekly-review', verifyCronSecret, async (req, res) => {
 });
 
 // LINE Webhook
-app.post('/webhook', middleware(lineConfig), (req, res) => {
-  const events = req.body.events || [];
-  console.log(`[Webhook] Received ${events.length} event(s)`);
-
-  // Respond 200 immediately
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
+  // Respond 200 immediately so LINE never times out
   res.status(200).send('OK');
+
+  const signature = req.headers['x-line-signature'];
+  const body = req.body;
+
+  if (!body || !signature) return;
+
+  // Verify HMAC-SHA256 signature
+  const hash = crypto
+    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET)
+    .update(body)
+    .digest('base64');
+
+  if (hash !== signature) {
+    console.warn('[Webhook] Invalid signature, ignoring');
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body.toString());
+  } catch (e) {
+    console.error('[Webhook] Parse error:', e);
+    return;
+  }
+
+  const events = parsed.events || [];
+  console.log(`[Webhook] Received ${events.length} event(s)`);
 
   for (const event of events) {
     if (event.type === 'message' && event.message.type === 'text') {
