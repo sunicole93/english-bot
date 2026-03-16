@@ -48,7 +48,7 @@ app.get('/cron/weekly-review', verifyCronSecret, async (req, res) => {
 });
 
 // LINE Webhook
-app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
   const signature = req.headers['x-line-signature'];
   const body = req.body;
 
