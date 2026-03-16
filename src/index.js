@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { middleware, validateSignature } from '@line/bot-sdk';
+import { middleware } from '@line/bot-sdk';
 import { handleReply } from './webhook/handleReply.js';
 import { run as runDailyLesson } from './jobs/dailyLesson.js';
 import { run as runDailyQuiz } from './jobs/dailyQuiz.js';
@@ -48,27 +48,11 @@ app.get('/cron/weekly-review', verifyCronSecret, async (req, res) => {
 });
 
 // LINE Webhook
-app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
-  const signature = req.headers['x-line-signature'];
-  const body = req.body;
-
-  if (!validateSignature(body, lineConfig.channelSecret, signature)) {
-    console.warn('[Webhook] Invalid signature');
-    return res.status(403).send('Forbidden');
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(body.toString());
-  } catch (e) {
-    console.error('[Webhook] Failed to parse body:', e);
-    return res.status(400).send('Bad Request');
-  }
-
-  const events = parsed.events || [];
+app.post('/webhook', middleware(lineConfig), (req, res) => {
+  const events = req.body.events || [];
   console.log(`[Webhook] Received ${events.length} event(s)`);
 
-  // Process events asynchronously, respond 200 immediately
+  // Respond 200 immediately
   res.status(200).send('OK');
 
   for (const event of events) {
