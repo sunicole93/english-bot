@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import crypto from 'crypto';
 import { handleReply } from './webhook/handleReply.js';
 import { run as runDailyLesson } from './jobs/dailyLesson.js';
 import { run as runDailyQuiz } from './jobs/dailyQuiz.js';
@@ -49,19 +48,6 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
 
   const signature = req.headers['x-line-signature'];
   const body = req.body;
-
-  if (!body || !signature) return;
-
-  // Verify HMAC-SHA256 signature
-  const hash = crypto
-    .createHmac('sha256', process.env.LINE_CHANNEL_SECRET)
-    .update(body)
-    .digest('base64');
-
-  if (hash !== signature) {
-    console.warn('[Webhook] Invalid signature, ignoring');
-    return;
-  }
 
   let parsed;
   try {
