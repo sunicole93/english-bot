@@ -6,6 +6,20 @@ const client = new messagingApi.MessagingApiClient({
 
 const USER_ID = process.env.LINE_USER_ID;
 
+export async function downloadLineImage(messageId) {
+  console.log("[LINE] downloadLineImage messageId:", messageId);
+  const stream = await client.getMessageContent(messageId);
+
+  // ReadableStream → Buffer → base64
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const buffer = Buffer.concat(chunks);
+  console.log("[LINE] downloadLineImage done, size:", buffer.length);
+  return buffer.toString("base64");
+}
+
 export async function pushDailyLesson(article, vocabList, youtubeUrl) {
   console.log("[LINE] pushDailyLesson");
 

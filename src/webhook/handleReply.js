@@ -9,12 +9,14 @@ import {
   translateText,
   lookupEnglishWord,
   analyzeFinancialReport,
+  analyzeFinancialImage,
 } from "../services/groq.js";
 import {
   replyMessage,
   pushQuizResult,
   replyTranslation,
   pushFinancialAnalysis,
+  downloadLineImage,
 } from "../services/lineService.js";
 
 // 判斷是否為測驗回答格式：大寫字母串 + 斜線 + 造句，例如 "ABCDBACADB / sentence"
@@ -35,6 +37,20 @@ function isEnglishWordLookup(text) {
 // 判斷是否為財經報告分析：文字超過 100 字元，視為長篇報告
 function isFinancialReport(text) {
   return text.trim().length > 100;
+}
+
+export async function handleImageReply(event) {
+  const replyToken = event.replyToken;
+  const messageId = event.message.id;
+  console.log("[HandleImageReply] image messageId:", messageId);
+
+  await replyMessage(replyToken, "⏳ 圖片分析中，請稍等約 15-30 秒...");
+
+  // 下載圖片 → 轉 base64 → AI 分析 → push 結果
+  downloadLineImage(messageId)
+    .then((base64Image) => analyzeFinancialImage(base64Image))
+    .then((result) => pushFinancialAnalysis(result))
+    .catch((err) => console.error("[HandleImageReply] error:", err));
 }
 
 export async function handleReply(event) {

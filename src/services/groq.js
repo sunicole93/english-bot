@@ -173,6 +173,63 @@ export async function translateText(chineseText) {
   }
 }
 
+export async function analyzeFinancialImage(
+  base64Image,
+  mimeType = "image/jpeg",
+) {
+  try {
+    console.log("[Groq] analyzeFinancialImage called");
+    const completion = await groq.chat.completions.create({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64Image}` },
+            },
+            {
+              type: "text",
+              text: `你是一位專業的財經分析師，精通台灣股票市場與全球產業鏈。
+請閱讀這張圖片中的財經報告或文章內容，並以繁體中文整理輸出。
+
+請只回傳 JSON，不要加說明或 markdown，格式如下：
+{
+  "summary": "核心摘要，200字內，用白話文說明這份報告在講什麼",
+  "key_points": ["重點1", "重點2", "重點3"],
+  "industry_chain": {
+    "upstream": [{"name": "環節或公司名", "description": "說明在做什麼"}],
+    "midstream": [{"name": "環節或公司名", "description": "說明在做什麼"}],
+    "downstream": [{"name": "環節或公司名", "description": "說明在做什麼"}]
+  },
+  "taiwan_stocks": [
+    {
+      "name": "公司名稱",
+      "ticker": "股票代號（不知道就填空字串）",
+      "role": "在產業鏈中的位置（上游/中游/下游）",
+      "strengths": ["優勢1", "優勢2"],
+      "weaknesses": ["劣勢1", "劣勢2"]
+    }
+  ],
+  "outlook": "整體產業展望，100字內"
+}`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.3,
+    });
+    const text = completion.choices[0].message.content;
+    const cleaned = cleanJSON(text);
+    console.log("[Groq] analyzeFinancialImage response received");
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error("[Groq] analyzeFinancialImage error:", err);
+    throw err;
+  }
+}
+
 export async function analyzeFinancialReport(text) {
   try {
     console.log("[Groq] analyzeFinancialReport called, length:", text.length);

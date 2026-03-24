@@ -1,15 +1,15 @@
-import 'dotenv/config';
-import express from 'express';
-import { handleReply } from './webhook/handleReply.js';
-import { run as runDailyLesson } from './jobs/dailyLesson.js';
-import { run as runDailyQuiz } from './jobs/dailyQuiz.js';
-import { run as runWeeklyReview } from './jobs/weeklyReview.js';
+import "dotenv/config";
+import express from "express";
+import { handleReply, handleImageReply } from "./webhook/handleReply.js";
+import { run as runDailyLesson } from "./jobs/dailyLesson.js";
+import { run as runDailyQuiz } from "./jobs/dailyQuiz.js";
+import { run as runWeeklyReview } from "./jobs/weeklyReview.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Health check
-app.get('/health', (req, res) => {
+app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
@@ -17,43 +17,43 @@ app.get('/health', (req, res) => {
 function verifyCronSecret(req, res, next) {
   const { secret } = req.query;
   if (!secret || secret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: "Unauthorized" });
   }
   next();
 }
 
 // Cron endpoints
-app.get('/cron/daily-lesson', verifyCronSecret, async (req, res) => {
-  console.log('[Cron] daily-lesson triggered');
+app.get("/cron/daily-lesson", verifyCronSecret, async (req, res) => {
+  console.log("[Cron] daily-lesson triggered");
   await runDailyLesson();
   res.json({ ok: true });
 });
 
-app.get('/cron/daily-quiz', verifyCronSecret, async (req, res) => {
-  console.log('[Cron] daily-quiz triggered');
+app.get("/cron/daily-quiz", verifyCronSecret, async (req, res) => {
+  console.log("[Cron] daily-quiz triggered");
   await runDailyQuiz();
   res.json({ ok: true });
 });
 
-app.get('/cron/weekly-review', verifyCronSecret, async (req, res) => {
-  console.log('[Cron] weekly-review triggered');
+app.get("/cron/weekly-review", verifyCronSecret, async (req, res) => {
+  console.log("[Cron] weekly-review triggered");
   await runWeeklyReview();
   res.json({ ok: true });
 });
 
 // LINE Webhook
-app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
+app.post("/webhook", express.raw({ type: "*/*" }), (req, res) => {
   // Respond 200 immediately so LINE never times out
-  res.status(200).send('OK');
+  res.status(200).send("OK");
 
-  const signature = req.headers['x-line-signature'];
+  const signature = req.headers["x-line-signature"];
   const body = req.body;
 
   let parsed;
   try {
     parsed = JSON.parse(body.toString());
   } catch (e) {
-    console.error('[Webhook] Parse error:', e);
+    console.error("[Webhook] Parse error:", e);
     return;
   }
 
@@ -61,9 +61,13 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
   console.log(`[Webhook] Received ${events.length} event(s)`);
 
   for (const event of events) {
-    if (event.type === 'message' && event.message.type === 'text') {
+    if (event.type === "message" && event.message.type === "text") {
       handleReply(event).catch((err) => {
-        console.error('[Webhook] handleReply error:', err);
+        console.error("[Webhook] handleReply error:", err);
+      });
+    } else if (event.type === "message" && event.message.type === "image") {
+      handleImageReply(event).catch((err) => {
+        console.error("[Webhook] handleImageReply error:", err);
       });
     }
   }
