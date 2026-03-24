@@ -9,11 +9,11 @@ function cleanJSON(text) {
     .trim();
 }
 
-async function chat(prompt) {
+async function chat(prompt, temperature = 0.7) {
   const completion = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [{ role: "user", content: prompt }],
-    temperature: 0.7,
+    temperature,
   });
   return completion.choices[0].message.content;
 }
@@ -40,14 +40,21 @@ export async function selectArticle(articleList) {
 export async function extractVocabulary(articleTitle, articleSummary) {
   try {
     console.log("[Groq] extractVocabulary called");
-    const prompt = `根據以下英文文章擷取10個對B2-C1學習者最有價值的單字。
+    const prompt = `你是專業英漢詞典編輯，請從以下英文文章擷取10個對B2-C1學習者最有價值的單字。
 優先選：多義詞、學術詞彙AWL、高頻搭配詞、常見誤用詞。
 文章標題：${articleTitle}
 文章摘要：${articleSummary}
-只回傳JSON array不要加說明或markdown：
-[{"word":"","pos":"n./v./adj./adv.","definition_zh":"","example":"（含單字的完整例句）","mnemonic":"（一句中文記憶法）"}]`;
 
-    const text = await chat(prompt);
+重要規則：
+1. definition_zh 必須使用正確的「繁體中文」，不可用簡體字
+2. definition_zh 要簡短精確，例如：loom → "隱約浮現；迫在眉睫"、disrupt → "擾亂；中斷"、unprecedented → "前所未有的"
+3. mnemonic 用一句有趣的繁體中文記憶法
+4. example 必須是含該單字的完整英文句子
+
+只回傳JSON array不要加說明或markdown：
+[{"word":"","pos":"n./v./adj./adv.","definition_zh":"（精確繁體中文解釋）","example":"（含單字的完整英文句子）","mnemonic":"（一句繁體中文記憶法）"}]`;
+
+    const text = await chat(prompt, 0.2);
     const cleaned = cleanJSON(text);
     console.log("[Groq] extractVocabulary response received");
     return JSON.parse(cleaned);
