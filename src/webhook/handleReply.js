@@ -8,7 +8,7 @@ import {
   gradeAnswer,
   translateText,
   lookupEnglishWord,
-} from "../services/gemini.js";
+} from "../services/groq.js";
 import {
   replyMessage,
   pushQuizResult,
