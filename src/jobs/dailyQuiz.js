@@ -31,8 +31,8 @@ export async function run() {
     const quiz = await generateQuiz(vocabList);
     console.log("[DailyQuiz] Quiz generated");
 
-    // 3. Save quiz session
-    const sessionId = await saveQuizSession({ quiz_data: quiz });
+    // 3. Save quiz session（直接存 quiz 物件，讓 handleReply 能直接讀 fill_blank 等欄位）
+    const sessionId = await saveQuizSession(quiz);
     console.log("[DailyQuiz] Quiz session saved, id:", sessionId);
 
     // 4. Push LINE message
