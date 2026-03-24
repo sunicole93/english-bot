@@ -173,6 +173,46 @@ export async function translateText(chineseText) {
   }
 }
 
+export async function analyzeFinancialReport(text) {
+  try {
+    console.log("[Groq] analyzeFinancialReport called, length:", text.length);
+    const prompt = `你是一位專業的財經分析師，精通台灣股票市場與全球產業鏈。
+請分析以下財經報告或文章，並以繁體中文整理輸出。
+
+報告內容：
+${text}
+
+請只回傳 JSON，不要加說明或 markdown，格式如下：
+{
+  "summary": "核心摘要，200字內，用白話文說明這份報告在講什麼",
+  "key_points": ["重點1", "重點2", "重點3"],
+  "industry_chain": {
+    "upstream": [{"name": "環節或公司名", "description": "說明在做什麼"}],
+    "midstream": [{"name": "環節或公司名", "description": "說明在做什麼"}],
+    "downstream": [{"name": "環節或公司名", "description": "說明在做什麼"}]
+  },
+  "taiwan_stocks": [
+    {
+      "name": "公司名稱",
+      "ticker": "股票代號（不知道就填空字串）",
+      "role": "在產業鏈中的位置（上游/中游/下游）",
+      "strengths": ["優勢1", "優勢2"],
+      "weaknesses": ["劣勢1", "劣勢2"]
+    }
+  ],
+  "outlook": "整體產業展望，100字內"
+}`;
+
+    const text_result = await chat(prompt, 0.3);
+    const cleaned = cleanJSON(text_result);
+    console.log("[Groq] analyzeFinancialReport response received");
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error("[Groq] analyzeFinancialReport error:", err);
+    throw err;
+  }
+}
+
 export async function generateWeeklyReport(stats) {
   try {
     console.log("[Groq] generateWeeklyReport called");

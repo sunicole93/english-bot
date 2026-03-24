@@ -742,6 +742,185 @@ export async function replyTranslation(replyToken, result) {
   }
 }
 
+export async function pushFinancialAnalysis(result) {
+  try {
+    console.log("[LINE] pushFinancialAnalysis called");
+
+    // 產業鏈區塊
+    const chainRows = [
+      { label: "🔼 上游", items: result.industry_chain?.upstream || [] },
+      { label: "➡️ 中游", items: result.industry_chain?.midstream || [] },
+      { label: "🔽 下游", items: result.industry_chain?.downstream || [] },
+    ];
+
+    const chainContents = chainRows.flatMap(({ label, items }) => {
+      if (!items.length) return [];
+      return [
+        {
+          type: "text",
+          text: label,
+          size: "sm",
+          weight: "bold",
+          color: "#185FA5",
+          margin: "sm",
+        },
+        ...items.map((item) => ({
+          type: "text",
+          text: `• ${item.name}：${item.description}`,
+          size: "xs",
+          color: "#444444",
+          wrap: true,
+        })),
+      ];
+    });
+
+    // 台股個股區塊
+    const stockContents = (result.taiwan_stocks || []).flatMap((stock) => [
+      { type: "separator", margin: "sm" },
+      {
+        type: "box",
+        layout: "vertical",
+        margin: "sm",
+        contents: [
+          {
+            type: "box",
+            layout: "horizontal",
+            contents: [
+              {
+                type: "text",
+                text: stock.ticker
+                  ? `${stock.name}（${stock.ticker}）`
+                  : stock.name,
+                size: "sm",
+                weight: "bold",
+                color: "#1A1A2E",
+                flex: 3,
+              },
+              {
+                type: "text",
+                text: stock.role || "",
+                size: "xs",
+                color: "#888888",
+                align: "end",
+                flex: 1,
+              },
+            ],
+          },
+          ...(stock.strengths || []).map((s) => ({
+            type: "text",
+            text: `✅ ${s}`,
+            size: "xs",
+            color: "#0F6E56",
+            wrap: true,
+          })),
+          ...(stock.weaknesses || []).map((w) => ({
+            type: "text",
+            text: `⚠️ ${w}`,
+            size: "xs",
+            color: "#D85A30",
+            wrap: true,
+          })),
+        ],
+      },
+    ]);
+
+    const flexMessage = {
+      type: "flex",
+      altText: "📊 財經分析報告",
+      contents: {
+        type: "bubble",
+        size: "giga",
+        header: {
+          type: "box",
+          layout: "vertical",
+          backgroundColor: "#1A1A2E",
+          paddingAll: "16px",
+          contents: [
+            {
+              type: "text",
+              text: "📊 財經分析報告",
+              color: "#A8D8EA",
+              size: "xs",
+              weight: "bold",
+            },
+            {
+              type: "text",
+              text: result.summary || "",
+              color: "#FFFFFF",
+              size: "sm",
+              wrap: true,
+            },
+          ],
+        },
+        body: {
+          type: "box",
+          layout: "vertical",
+          paddingAll: "16px",
+          spacing: "xs",
+          contents: [
+            {
+              type: "text",
+              text: "📌 核心重點",
+              size: "sm",
+              weight: "bold",
+              color: "#534AB7",
+            },
+            ...(result.key_points || []).map((p) => ({
+              type: "text",
+              text: `• ${p}`,
+              size: "xs",
+              color: "#333333",
+              wrap: true,
+            })),
+            { type: "separator", margin: "md" },
+            {
+              type: "text",
+              text: "🔗 產業鏈結構",
+              size: "sm",
+              weight: "bold",
+              color: "#185FA5",
+              margin: "sm",
+            },
+            ...chainContents,
+            { type: "separator", margin: "md" },
+            {
+              type: "text",
+              text: "🇹🇼 台股對應",
+              size: "sm",
+              weight: "bold",
+              color: "#1A1A2E",
+              margin: "sm",
+            },
+            ...stockContents,
+          ],
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          paddingAll: "12px",
+          contents: [
+            {
+              type: "text",
+              text: `📈 展望：${result.outlook || ""}`,
+              size: "xs",
+              color: "#555555",
+              wrap: true,
+            },
+          ],
+        },
+      },
+    };
+
+    await client.pushMessage({ to: USER_ID, messages: [flexMessage] });
+    console.log("[LINE] pushFinancialAnalysis sent");
+  } catch (err) {
+    console.error("[LINE] pushFinancialAnalysis error:", err);
+    throw err;
+  }
+}
+
+// replyFinancialAnalysis 已由 pushFinancialAnalysis 取代（replyToken 只能用一次，需要用 push）
+
 export async function replyMessage(replyToken, text) {
   try {
     console.log("[LINE] replyMessage:", text.substring(0, 50));

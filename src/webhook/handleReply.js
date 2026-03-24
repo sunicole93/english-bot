@@ -8,11 +8,13 @@ import {
   gradeAnswer,
   translateText,
   lookupEnglishWord,
+  analyzeFinancialReport,
 } from "../services/groq.js";
 import {
   replyMessage,
   pushQuizResult,
   replyTranslation,
+  pushFinancialAnalysis,
 } from "../services/lineService.js";
 
 // 判斷是否為測驗回答格式：大寫字母串 + 斜線 + 造句，例如 "ABCDBACADB / sentence"
@@ -30,6 +32,11 @@ function isEnglishWordLookup(text) {
   return /^[a-zA-Z\s'-]+$/.test(text.trim()) && !text.includes("/");
 }
 
+// 判斷是否為財經報告分析：文字超過 100 字元，視為長篇報告
+function isFinancialReport(text) {
+  return text.trim().length > 100;
+}
+
 export async function handleReply(event) {
   const replyToken = event.replyToken;
   const userText = event.message.text.trim();
@@ -43,6 +50,19 @@ export async function handleReply(event) {
       return;
     }
     await gradeQuiz(replyToken, quizSession, userText);
+    return;
+  }
+
+  // 財經報告分析模式（長文字優先判斷，避免被翻譯模式誤判）
+  if (isFinancialReport(userText)) {
+    // 先用 replyToken 回覆「等待中」（replyToken 只能用一次）
+    // 實際分析結果用 pushMessage 推送
+    await replyMessage(replyToken, "⏳ 分析中，請稍等約 10-20 秒...");
+    analyzeFinancialReport(userText)
+      .then((result) => pushFinancialAnalysis(result))
+      .catch((err) =>
+        console.error("[HandleReply] analyzeFinancialReport error:", err),
+      );
     return;
   }
 
