@@ -40,16 +40,18 @@ export async function selectArticle(articleList) {
 export async function extractVocabulary(articleTitle, articleSummary) {
   try {
     console.log("[Groq] extractVocabulary called");
-    const prompt = `你是專業英漢詞典編輯，請從以下英文文章擷取10個對B2-C1學習者最有價值的單字。
-優先選：多義詞、學術詞彙AWL、高頻搭配詞、常見誤用詞。
+    const prompt = `你是專業英漢詞典編輯，請從以下英文文章擷取10個對C1-C2程度學習者最有價值的單字。
+目標：挑選母語者日常不常說、但在正式寫作/閱讀中頻繁出現的高價值單字。
+優先選：學術詞彙AWL、低頻但實用的動詞/形容詞、容易誤用的詞、有豐富搭配詞的詞。
+避免：太基礎的詞（如 important, show, use）、純專業術語（如 GDP, algorithm）。
 文章標題：${articleTitle}
 文章摘要：${articleSummary}
 
 重要規則：
 1. definition_zh 必須使用正確的「繁體中文」，不可用簡體字
 2. definition_zh 要簡短精確，例如：loom → "隱約浮現；迫在眉睫"、disrupt → "擾亂；中斷"、unprecedented → "前所未有的"
-3. mnemonic 用一句有趣的繁體中文記憶法
-4. example 必須是含該單字的完整英文句子
+3. mnemonic 用一句有趣的繁體中文記憶法，幫助聯想記憶
+4. example 必須是含該單字的完整英文句子，展示道地用法
 
 只回傳JSON array不要加說明或markdown：
 [{"word":"","pos":"n./v./adj./adv.","definition_zh":"（精確繁體中文解釋）","example":"（含單字的完整英文句子）","mnemonic":"（一句繁體中文記憶法）"}]`;
@@ -67,18 +69,33 @@ export async function extractVocabulary(articleTitle, articleSummary) {
 export async function generateQuiz(vocabList) {
   try {
     console.log("[Groq] generateQuiz called");
-    const prompt = `根據以下單字清單出3道測驗題。
-單字清單：${JSON.stringify(vocabList)}
-題型1(fill_blank)：選1個單字造填空句，用___表示空格
-題型2(multiple_choice)：選1個單字出4選1定義題，選項用A/B/C/D
-題型3(make_sentence)：選1個單字請學習者造句
-只回傳JSON不要加說明或markdown：
-{"fill_blank":{"question":"","answer":"","vocab_id":""},"multiple_choice":{"question":"","options":{"A":"","B":"","C":"","D":""},"answer":"","vocab_id":""},"make_sentence":{"question":"請用單字___造一個完整英文句子","target_word":"","vocab_id":""}}`;
 
-    const text = await chat(prompt);
-    const cleaned = cleanJSON(text);
+    // 為每個單字各出一道 4 選 1 定義題
+    const mcPrompt = `根據以下單字清單，為「每一個」單字各出一道4選1定義選擇題。
+單字清單：${JSON.stringify(vocabList.map((v) => ({ id: v.id, word: v.word, definition_zh: v.definition_zh })))}
+
+規則：
+1. 每個單字出一題，問「哪個是這個單字的正確中文意思？」
+2. 4個選項中只有1個正確，其他3個是合理但錯誤的干擾選項
+3. 正確答案位置要隨機分佈（不要全是A）
+4. vocab_id 填入該單字的 id
+
+只回傳JSON array不要加說明或markdown：
+[{"word":"","question":"Which meaning is correct for 'word'?","options":{"A":"","B":"","C":"","D":""},"answer":"A","vocab_id":""}]`;
+
+    const mcText = await chat(mcPrompt, 0.3);
+    const mcQuestions = JSON.parse(cleanJSON(mcText));
+
+    // 選第一個單字出造句題
+    const sentenceWord = vocabList[0];
+    const sentenceQuestion = {
+      question: `請用單字 "${sentenceWord.word}" 造一個完整的英文句子`,
+      target_word: sentenceWord.word,
+      vocab_id: sentenceWord.id || null,
+    };
+
     console.log("[Groq] generateQuiz response received");
-    return JSON.parse(cleaned);
+    return { mc_questions: mcQuestions, make_sentence: sentenceQuestion };
   } catch (err) {
     console.error("[Groq] generateQuiz error:", err);
     throw err;

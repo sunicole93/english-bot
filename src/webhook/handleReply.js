@@ -15,14 +15,17 @@ import {
   replyTranslation,
 } from "../services/lineService.js";
 
-// 判斷是否為中文翻譯請求：含中文字且不符合測驗回答格式
-function isTranslationRequest(text) {
-  const hasChinese = /[\u4e00-\u9fff]/.test(text);
-  const isQuizFormat = /^1\..+\/\s*2\..+\/\s*3\..+/.test(text);
-  return hasChinese && !isQuizFormat;
+// 判斷是否為測驗回答格式：大寫字母串 + 斜線 + 造句，例如 "ABCDBACADB / sentence"
+function isQuizAnswer(text) {
+  return /^[A-Da-d]+\s*\/\s*.+/.test(text.trim());
 }
 
-// 判斷是否為英文單字查詢：純英文字母（單字或片語），沒有斜線測驗格式
+// 判斷是否為中文翻譯請求：含中文字
+function isTranslationRequest(text) {
+  return /[\u4e00-\u9fff]/.test(text);
+}
+
+// 判斷是否為英文單字查詢：純英文字母（單字或短片語），沒有斜線
 function isEnglishWordLookup(text) {
   return /^[a-zA-Z\s'-]+$/.test(text.trim()) && !text.includes("/");
 }
@@ -32,7 +35,18 @@ export async function handleReply(event) {
   const userText = event.message.text.trim();
   console.log("[HandleReply] User input:", userText);
 
-  // 英文單字查詢模式：純英文輸入
+  // 測驗回答模式（優先判斷，避免被誤判為單字查詢）
+  if (isQuizAnswer(userText)) {
+    const quizSession = await getPendingQuiz();
+    if (!quizSession) {
+      await replyMessage(replyToken, "目前沒有待回答的測驗喔！");
+      return;
+    }
+    await gradeQuiz(replyToken, quizSession, userText);
+    return;
+  }
+
+  // 英文單字查詢模式
   if (isEnglishWordLookup(userText)) {
     try {
       const result = await lookupEnglishWord(userText);
@@ -44,7 +58,7 @@ export async function handleReply(event) {
     return;
   }
 
-  // 翻譯模式：訊息含中文且不是測驗回答格式
+  // 中文翻譯模式
   if (isTranslationRequest(userText)) {
     try {
       const result = await translateText(userText);
@@ -56,93 +70,69 @@ export async function handleReply(event) {
     return;
   }
 
-  // 取得待回答測驗
-  const quizSession = await getPendingQuiz();
-  if (!quizSession) {
-    await replyMessage(replyToken, "目前沒有待回答的測驗喔！");
-    return;
-  }
+  // 其他輸入：提示使用方式
+  await replyMessage(
+    replyToken,
+    "你可以：\n• 輸入英文單字查詢（如 unprecedented）\n• 輸入中文翻譯（如 我想去旅行）\n• 回答測驗（如 ABCDBACADB / The policy was criticized.）",
+  );
+}
 
-  // 解析格式：「1. 答案 / 2. A / 3. 造句」
-  const parts = userText.split("/").map((s) => s.trim());
-  if (parts.length !== 3) {
-    await replyMessage(
-      replyToken,
-      "格式錯誤！請用以下格式回答：\n1. 填空答案 / 2. A或B或C或D / 3. 造句句子\n\n例：1. unprecedented / 2. B / 3. The unprecedented event shocked everyone.",
-    );
-    return;
-  }
+async function gradeQuiz(replyToken, quizSession, userText) {
+  // 解析新格式：「ABCDBACADB / 造句」
+  const slashIndex = userText.indexOf("/");
+  const mcPart = userText.slice(0, slashIndex).trim().toUpperCase();
+  const sentence = userText.slice(slashIndex + 1).trim();
 
-  const answer1 = parts[0].replace(/^1\.\s*/, "").trim();
-  const answer2 = parts[1]
-    .replace(/^2\.\s*/, "")
-    .trim()
-    .toUpperCase();
-  const answer3 = parts[2].replace(/^3\.\s*/, "").trim();
-
-  if (!answer1 || !answer2 || !answer3) {
-    await replyMessage(
-      replyToken,
-      "格式錯誤！請確認每一題都有填寫。\n格式：1. 填空答案 / 2. A或B或C或D / 3. 造句句子",
-    );
-    return;
-  }
-
-  // quiz_sessions 欄位為 questions_json
   const quiz = quizSession.questions_json;
+  const mcQuestions = quiz.mc_questions || [];
+
+  if (!sentence) {
+    await replyMessage(
+      replyToken,
+      `格式錯誤！請用：\n選擇答案 / 造句\n\n例：ABCDBACADB / The policy was severely criticized.`,
+    );
+    return;
+  }
+
   const results = [];
 
-  // 批改填空題
-  const fillCorrect =
-    answer1.toLowerCase().trim() ===
-    quiz.fill_blank.answer.toLowerCase().trim();
-  results.push({
-    quiz_session_id: quizSession.id,
-    vocab_id: quiz.fill_blank.vocab_id || null,
-    quiz_type: "填空題",
-    user_answer: answer1,
-    is_correct: fillCorrect,
-    feedback: fillCorrect
-      ? "答對了！"
-      : `正確答案是：${quiz.fill_blank.answer}`,
-    corrected: fillCorrect ? "" : quiz.fill_blank.answer,
-  });
+  // 批改每一道選擇題
+  const mcAnswers = mcPart.split("").filter((c) => /[A-D]/.test(c));
+  for (let i = 0; i < mcQuestions.length; i++) {
+    const q = mcQuestions[i];
+    const userAnswer = mcAnswers[i] || "";
+    const isCorrect = userAnswer === q.answer.toUpperCase();
+    results.push({
+      quiz_session_id: quizSession.id,
+      vocab_id: q.vocab_id || null,
+      quiz_type: `選擇題`,
+      user_answer: userAnswer,
+      is_correct: isCorrect,
+      feedback: isCorrect
+        ? `✅ ${q.word}：答對了！`
+        : `❌ ${q.word}：正確答案是 ${q.answer}（${q.options[q.answer]}）`,
+      corrected: isCorrect ? "" : `${q.answer}. ${q.options[q.answer]}`,
+    });
+  }
 
-  // 批改選擇題
-  const mcCorrect =
-    answer2 === quiz.multiple_choice.answer.toUpperCase().trim();
-  results.push({
-    quiz_session_id: quizSession.id,
-    vocab_id: quiz.multiple_choice.vocab_id || null,
-    quiz_type: "選擇題",
-    user_answer: answer2,
-    is_correct: mcCorrect,
-    feedback: mcCorrect
-      ? "選對了！"
-      : `正確答案是：${quiz.multiple_choice.answer}`,
-    corrected: mcCorrect
-      ? ""
-      : `${quiz.multiple_choice.answer}. ${quiz.multiple_choice.options[quiz.multiple_choice.answer]}`,
-  });
-
-  // 批改造句題（Gemini）
+  // 批改造句題
+  const targetWord = quiz.make_sentence?.target_word || "";
   let sentenceResult = {
     correct: false,
     feedback: "批改失敗，請稍後再試",
     corrected: "",
   };
   try {
-    const targetWord = quiz.make_sentence.target_word;
-    sentenceResult = await gradeAnswer(targetWord, targetWord, answer3);
+    sentenceResult = await gradeAnswer(targetWord, targetWord, sentence);
   } catch (err) {
     console.error("[HandleReply] gradeAnswer error:", err);
   }
 
   results.push({
     quiz_session_id: quizSession.id,
-    vocab_id: quiz.make_sentence.vocab_id || null,
+    vocab_id: quiz.make_sentence?.vocab_id || null,
     quiz_type: "造句題",
-    user_answer: answer3,
+    user_answer: sentence,
     is_correct: sentenceResult.correct,
     feedback: sentenceResult.feedback,
     corrected: sentenceResult.corrected || "",
